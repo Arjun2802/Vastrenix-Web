@@ -643,7 +643,7 @@ function subPrivacy() {
 
       '<section class="card pad stack" style="gap:10px">' +
         '<h3 style="margin:0;font-size:16px">' + esc(t('p_s5_t', '5. Payment Processing & Subscriptions')) + '</h3>' +
-        '<p class="small muted" style="margin:0;line-height:1.6">Vastrenix plan subscriptions are processed through Razorpay Software Private Limited. Vastrenix does NOT collect, handle, or store debit/credit card numbers, CVVs, net banking credentials, or UPI MPINs. All payments are processed through Razorpay’s PCI-DSS Level 1 certified payment gateway (<a href="https://razorpay.com/privacy/" target="_blank" rel="noopener" style="color:var(--accent)">Razorpay Privacy Policy</a>).</p>' +
+        '<p class="small muted" style="margin:0;line-height:1.6">Vastrenix plans are paid by UPI from your own banking or UPI app. Vastrenix does NOT collect, handle, or store debit/credit card numbers, CVVs, net banking credentials, or UPI PINs. We only receive the plan, the amount and the UTR / reference you submit, which we use to verify the payment and activate your plan.</p>' +
       '</section>' +
 
       '<section class="card pad stack" style="gap:10px;border-left:3px solid var(--accent)">' +

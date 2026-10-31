@@ -2,9 +2,11 @@
   "name": "vastrenix",
   "version": "2.0.0",
   "private": true,
-  "description": "Vastrenix — retail, wholesale and dealer management for clothing stores",
+  "description": "Vastrenix \u2014 retail, wholesale and dealer management for clothing stores",
   "license": "UNLICENSED",
-  "engines": { "node": ">=20" },
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "vendor": "node scripts/vendor.js",
     "serve": "npx --yes http-server@14.1.1 www -p 8080 -c-1",
@@ -13,10 +15,11 @@
     "check": "for f in www/js/*.js admin/js/*.js; do node --check \"$f\" || exit 1; done",
     "set-admin": "node scripts/set-admin.js",
     "deploy:rules": "firebase deploy --only firestore:rules",
-    "deploy:app": "firebase deploy --only hosting:app",
-    "deploy:admin": "firebase deploy --only hosting:admin",
     "android:debug": "cd android && ./gradlew assembleDebug",
-    "android:release": "cd android && ./gradlew assembleRelease bundleRelease"
+    "android:release": "cd android && ./gradlew assembleRelease bundleRelease",
+    "build:web": "node scripts/build-web.js",
+    "serve:web": "node scripts/build-web.js && npx --yes http-server@14.1.1 public -p 8080 -c-1",
+    "deploy:web": "firebase deploy --only hosting"
   },
   "dependencies": {
     "firebase": "10.14.1",

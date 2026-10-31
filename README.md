@@ -4,6 +4,7 @@ POS billing, garment stock, GST invoices, customer dues, dealer orders and staff
 
 | Part | Folder | What it is |
 |---|---|---|
+| **Website** | `site/` | Landing page, privacy policy, social share image. Served at `/`. |
 | **Store app** | `www/` | The product stores use. Vanilla JS, no build step. Runs as the Android app, as a website, or offline on one device. |
 | **Android app** | `android/` | Android Studio project that packages `www/` into a hardened WebView app (APK + Play Store AAB). |
 | **Admin console** | `admin/` | For Vastrenix staff: verify plan payments, manage store trials and plans, handle support tickets, audit log. |
@@ -49,7 +50,7 @@ Admin access is a Firebase custom claim, checked by the security rules.
 npm install
 npm run vendor          # copies pinned Firebase / PDF / QR libraries into www/vendor and admin/vendor
 npm run serve           # store app  → http://localhost:8080
-npm run serve:admin     # admin      → http://localhost:8081
+npm run serve:admin     # admin      → http://localhost:8081  (or npm run serve:web → /admin/)
 npm test                # headless smoke tests (first time: npx playwright install chromium)
 ```
 
@@ -84,15 +85,28 @@ For the Play Store, upload the **AAB** and enrol in **Play App Signing**.
 
 The web app is copied into the APK at build time (`syncWebAssets` task), so edit `www/`, never the generated copy.
 
-## 5. Hosting the website and admin console (optional)
+## 5. Put the website and admin console online
+
+One site serves everything; `npm run build:web` assembles it into `public/`:
+
+| URL | What |
+|---|---|
+| `https://<domain>/` | Landing page (`site/`) |
+| `https://<domain>/app/` | Store app, web version (`www/`) |
+| `https://<domain>/admin/` | Platform admin console. Only `platformAdmin` accounts can sign in. |
+| `https://<domain>/privacy/` | Privacy policy |
 
 ```bash
-cp .firebaserc.example .firebaserc       # set your project + two hosting site names
-npx firebase-tools hosting:sites:create vastranix-admin
-npm run deploy:app
-npm run deploy:admin
+npx firebase-tools login
+npx firebase-tools use --add      # pick your project once
+npm run deploy:rules
+npm run deploy:web                # builds public/ (www + admin) and uploads it
 ```
-Security headers (HSTS, frame-deny, nosniff, referrer and permissions policy) are set in `firebase.json`.
+Preview locally with `npm run serve:web`, then open http://localhost:8080, /app/ and /admin/.
+**On Vercel instead:** import the repo with **Root Directory left empty** (the repo root, not `www`). `vercel.json` sets the build command (`node scripts/build-web.js`), the output folder (`public`) and the security headers. The admin console is then at `https://<your-domain>/admin/`. Firestore rules still deploy with `npm run deploy:rules`.
+The admin console isn't linked from the store app. Access is enforced by the security rules, not by the URL.
+Security headers (HSTS, frame-deny, nosniff, referrer and permissions policy, no-store and noindex on `/admin/`) are set in `firebase.json`.
+The APK contains only the store app; the admin console is never bundled into it.
 
 ---
 

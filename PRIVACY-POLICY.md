@@ -85,9 +85,9 @@ All data is encrypted in transit using **TLS 1.3 / HTTPS** and encrypted at rest
 
 Vastrenix offers paid software subscriptions for multi-branch sync and commercial operations. 
 
-- Subscription billing is processed exclusively through **Razorpay Software Private Limited** (“Razorpay”).
-- **No Card or Banking Credential Storage:** Vastrenix **does not** collect, transmit, or store credit card numbers, debit card numbers, CVVs, net-banking passwords, or UPI MPINs. All sensitive payment details are entered directly into Razorpay’s secure, PCI-DSS Level 1 compliant checkout interface.
-- Razorpay provides Vastrenix with non-sensitive transaction confirmation identifiers, subscription status, and payment cycle metadata. For details regarding Razorpay’s privacy practices, please refer to the [Razorpay Privacy Policy](https://razorpay.com/privacy/).
+- Plans are paid by UPI from your own banking or UPI app, directly to Vastrenix’s UPI ID.
+- **No Card or Banking Credential Storage:** Vastrenix **does not** collect, transmit, or store card numbers, CVVs, net-banking passwords, or UPI PINs.
+- We receive only the plan chosen, the amount and the UTR / transaction reference you submit, and use it to verify the payment and activate your plan.
 
 ---
 
