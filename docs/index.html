@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Vastrenix — Garment POS, Inventory & Dealer Network</title>
+  <meta name="description" content="Billing, Stock, and Dealer Orders — One Thread. Built for Indian clothing stores and textile merchants.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #0B0B0F;
+      --surface: #15151B;
+      --line: #25252E;
+      --fg: #F0EFF6;
+      --muted: #8E8D9A;
+      --accent: #7A63FF;
+      --ok: #5BE3A6;
+    }
+    @media (prefers-color-scheme: light) {
+      :root {
+        --bg: #F7F7FA;
+        --surface: #FFFFFF;
+        --line: #E2E2EA;
+        --fg: #111116;
+        --muted: #6A6978;
+        --accent: #644EE8;
+        --ok: #17935D;
+      }
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--fg);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      padding: 24px;
+      text-align: center;
+    }
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 20px;
+      padding: 40px 24px;
+      max-width: 540px;
+      width: 100%;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.15);
+    }
+    h1 {
+      font-size: 32px;
+      letter-spacing: -0.03em;
+      margin: 16px 0 6px;
+    }
+    p.tagline {
+      color: var(--accent);
+      font-weight: 600;
+      font-size: 14px;
+      margin-bottom: 16px;
+    }
+    p.desc {
+      color: var(--muted);
+      font-size: 14.5px;
+      line-height: 1.6;
+      margin-bottom: 28px;
+    }
+    .btn-group {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 14px 20px;
+      border-radius: 12px;
+      font-weight: 600;
+      font-size: 15px;
+      text-decoration: none;
+      transition: opacity 0.2s;
+    }
+    .btn.primary {
+      background: var(--accent);
+      color: #FFFFFF;
+    }
+    .btn.line {
+      background: transparent;
+      border: 1px solid var(--line);
+      color: var(--fg);
+    }
+    .btn:hover { opacity: 0.9; }
+    footer {
+      margin-top: 32px;
+      font-size: 12.5px;
+      color: var(--muted);
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <svg width="48" height="48" viewBox="0 0 40 40" fill="none">
+      <rect width="40" height="40" rx="10" fill="#7A63FF"/>
+      <path d="M12 14L20 28L28 14" stroke="#FFFFFF" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+    <h1>vastrenix</h1>
+    <p class="tagline">Billing, Stock, and Dealer Orders — One Thread.</p>
+    <p class="desc">
+      Built specifically for India’s clothing stores, boutiques, manufacturers, and textile wholesalers. Fast counter POS, multi-location inventory, customer Khata, and authorized dealer network.
+    </p>
+
+    <div class="btn-group">
+      <a href="privacy.html" class="btn primary">Read Privacy Policy (DPDPA 2023)</a>
+      <a href="mailto:contact@vastrenix.com" class="btn line">Contact Us: contact@vastrenix.com</a>
+    </div>
+  </div>
+
+  <footer>
+    &copy; 2026 Vastrenix. All rights reserved.
+  </footer>
+</body>
+</html>

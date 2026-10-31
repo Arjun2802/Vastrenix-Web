@@ -1,0 +1,103 @@
+plugins {
+    id "com.android.application"
+}
+
+// ---------------------------------------------------------------------------
+// Version: bump versionCode for every release you upload (Play rejects reused codes).
+// ---------------------------------------------------------------------------
+def appVersionCode = 10
+def appVersionName = "2.0.0"
+
+// ---------------------------------------------------------------------------
+// Release signing. Never commit the keystore or its passwords.
+// Provide them either as environment variables (CI) or in android/key.properties (local, git-ignored):
+//   storeFile=/absolute/path/to/upload-keystore.jks
+//   storePassword=...
+//   keyAlias=upload
+//   keyPassword=...
+// ---------------------------------------------------------------------------
+def keyProps = new Properties()
+def keyPropsFile = rootProject.file("key.properties")
+if (keyPropsFile.exists()) { keyPropsFile.withInputStream { keyProps.load(it) } }
+def signingValue = { String prop, String env -> System.getenv(env) ?: keyProps.getProperty(prop) }
+def releaseStoreFile = signingValue("storeFile", "VX_KEYSTORE_PATH")
+def hasReleaseSigning = releaseStoreFile != null && file(releaseStoreFile).exists()
+
+android {
+    namespace "com.vastrenix.app"
+    compileSdk 36
+
+    defaultConfig {
+        applicationId "com.vastrenix.app"
+        minSdk 26
+        targetSdk 36
+        versionCode appVersionCode
+        versionName appVersionName
+    }
+
+    signingConfigs {
+        if (hasReleaseSigning) {
+            release {
+                storeFile file(releaseStoreFile)
+                storePassword signingValue("storePassword", "VX_KEYSTORE_PASSWORD")
+                keyAlias signingValue("keyAlias", "VX_KEY_ALIAS")
+                keyPassword signingValue("keyPassword", "VX_KEY_PASSWORD")
+                enableV2Signing true
+                enableV3Signing true
+            }
+        }
+    }
+
+    buildTypes {
+        debug {
+            applicationIdSuffix ".debug"
+            versionNameSuffix "-debug"
+        }
+        release {
+            minifyEnabled true
+            shrinkResources true
+            proguardFiles getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro"
+            if (hasReleaseSigning) signingConfig signingConfigs.release
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    // The web app (../www) is copied into the APK at build time; it is never edited here.
+    sourceSets {
+        main.assets.srcDirs += layout.buildDirectory.dir("generated/webassets")
+    }
+
+    packaging {
+        resources.excludes += ["META-INF/*.version", "META-INF/LICENSE*", "META-INF/NOTICE*"]
+    }
+
+    lint {
+        abortOnError true
+        checkReleaseBuilds true
+        disable "MissingTranslation"
+    }
+}
+
+// Web app source: ../www when building from the full repository. A standalone copy of this project
+// (Vastrenix-Android-Source.zip) already contains the app in src/main/assets/web, and the sync is skipped.
+def webSrc = rootProject.file("../www")
+if (webSrc.exists() && !file("src/main/assets/web/index.html").exists()) {
+    def syncWebAssets = tasks.register("syncWebAssets", Sync) {
+        description = "Copies the web app from ../www into the APK assets (folder: web/)."
+        from(webSrc) {
+            exclude "**/*.map", "**/README*", "**/.DS_Store", "**/Thumbs.db"
+        }
+        into(layout.buildDirectory.dir("generated/webassets/web"))
+    }
+    tasks.named("preBuild") { dependsOn(syncWebAssets) }
+}
+
+dependencies {
+    implementation "androidx.webkit:webkit:1.13.0"
+    implementation "androidx.core:core:1.16.0"
+    implementation "androidx.activity:activity:1.10.1"
+}

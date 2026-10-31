@@ -1,0 +1,31 @@
+{
+  "name": "vastrenix",
+  "version": "2.0.0",
+  "private": true,
+  "description": "Vastrenix — retail, wholesale and dealer management for clothing stores",
+  "license": "UNLICENSED",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "vendor": "node scripts/vendor.js",
+    "serve": "npx --yes http-server@14.1.1 www -p 8080 -c-1",
+    "serve:admin": "npx --yes http-server@14.1.1 admin -p 8081 -c-1",
+    "test": "node tests/smoke.js www && node tests/admin.smoke.js",
+    "check": "for f in www/js/*.js admin/js/*.js; do node --check \"$f\" || exit 1; done",
+    "set-admin": "node scripts/set-admin.js",
+    "deploy:rules": "firebase deploy --only firestore:rules",
+    "deploy:app": "firebase deploy --only hosting:app",
+    "deploy:admin": "firebase deploy --only hosting:admin",
+    "android:debug": "cd android && ./gradlew assembleDebug",
+    "android:release": "cd android && ./gradlew assembleRelease bundleRelease"
+  },
+  "dependencies": {
+    "firebase": "10.14.1",
+    "html2canvas": "1.4.1",
+    "jspdf": "4.2.1",
+    "qrcode-generator": "1.4.4"
+  },
+  "devDependencies": {
+    "firebase-admin": "13.4.0",
+    "playwright": "1.54.1"
+  }
+}

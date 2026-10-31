@@ -1,0 +1,30 @@
+# dependencies & build output
+node_modules/
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+*.apk
+*.aab
+*.idsig
+
+# secrets — never commit
+android/key.properties
+key.properties
+*.jks
+*.keystore
+*.pem
+*.p12
+.env
+.env.*
+!.env.example
+*service-account*.json
+.firebaserc
+.firebase/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.iml

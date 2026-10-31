@@ -1,0 +1,219 @@
+rules_version = '2';
+// Vastrenix — Cloud Firestore security rules
+// ---------------------------------------------------------------------------
+// Tenancy:   every store lives under /stores/{ownerUid}. Only the owner and approved (active) staff can read it.
+// Plans:     a store can write business data only while its trial or paid plan is valid. Plans are activated
+//            exclusively by a platform admin (custom auth claim `platformAdmin`), never by the store itself.
+// Platform:  platform admins (set with scripts/set-admin.js) get read access to every store and manage
+//            subscriptions, payment verifications and support tickets from the admin console (admin/).
+// Deploy:    firebase deploy --only firestore:rules
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ---------- helpers ----------
+    function signedIn() { return request.auth != null; }
+    function uid() { return request.auth.uid; }
+    function isPlatformAdmin() { return signedIn() && request.auth.token.platformAdmin == true; }
+    function nowMs() { return request.time.toMillis(); }
+    function onlyKeys(keys) { return request.resource.data.keys().hasOnly(keys); }
+    function str(v, max) { return v is string && v.size() <= max; }
+    function changed() { return request.resource.data.diff(resource.data).affectedKeys(); }
+    // A fresh trial: created by the owner, starts now, lasts at most 7 days.
+    function validNewTrial(sid) {
+      let d = request.resource.data;
+      return d.status == 'trialing'
+        && d.businessId == sid
+        && d.trialStartedAt is number && d.trialStartedAt > nowMs() - 600000 && d.trialStartedAt < nowMs() + 600000
+        && d.trialEndsAt is number && d.trialEndsAt <= d.trialStartedAt + 7 * 86400000
+        && (!('trialThreeDUsed' in d) || d.trialThreeDUsed == 0)
+        && (!('trialThreeDLimit' in d) || d.trialThreeDLimit == 3)
+        && (!('expiresAt' in d))
+        && (!('gstin' in d) || str(d.gstin, 20))
+        && onlyKeys(['businessId', 'status', 'trialStartedAt', 'trialEndsAt', 'trialThreeDUsed', 'trialThreeDLimit', 'cycleId', 'gstin', 'createdAt', 'updatedAt']);
+    }
+    // The only change an owner may make to an existing subscription: count one trial 3D preview.
+    function validThreeDIncrement() {
+      return changed().hasOnly(['trialThreeDUsed', 'updatedAt'])
+        && resource.data.status == 'trialing'
+        && request.resource.data.trialThreeDUsed == resource.data.get('trialThreeDUsed', 0) + 1
+        && request.resource.data.trialThreeDUsed <= resource.data.get('trialThreeDLimit', 3)
+        && nowMs() < resource.data.trialEndsAt;
+    }
+    // Plan price must match the cycle, so a request can't pair the annual plan with the monthly price.
+    function validPlanPair(d) {
+      return (d.cycle == 'monthly' && d.amount == 699)
+        || (d.cycle == 'quarterly' && d.amount == 1899)
+        || (d.cycle == 'annual' && d.amount == 6999);
+    }
+    function codePath(code) { return /databases/$(database)/documents/codes/$(code); }
+
+    // ---------- user profile: which store a signed-in user belongs to ----------
+    match /users/{userId} {
+      allow read: if signedIn() && (uid() == userId || isPlatformAdmin());
+      // storeId must be your own uid (you own the store) or come from a store code you entered (joinCode),
+      // otherwise anyone could point their profile at any store and read its profile via joining().
+      allow create, update: if signedIn() && uid() == userId
+        && onlyKeys(['storeId', 'email', 'name', 'joinCode'])
+        && request.resource.data.storeId is string && request.resource.data.storeId.size() <= 128
+        && str(request.resource.data.get('email', ''), 254) && str(request.resource.data.get('name', ''), 120)
+        && (request.resource.data.storeId == userId || (
+          request.resource.data.get('joinCode', '') is string
+          && request.resource.data.get('joinCode', '').matches('^VX-[A-Z0-9]{2,8}-[A-Z0-9]{4}$')
+          && get(codePath(request.resource.data.joinCode)).data.storeId == request.resource.data.storeId));
+      allow delete: if signedIn() && uid() == userId;
+    }
+
+    // ---------- store codes: staff look up one code; nobody can list them ----------
+    match /codes/{code} {
+      allow get: if signedIn();
+      allow list: if isPlatformAdmin();
+      allow create: if signedIn() && request.resource.data.storeId == uid()
+        && onlyKeys(['storeId', 'name']) && str(request.resource.data.get('name', ''), 120)
+        && code.matches('^VX-[A-Z0-9]{2,8}-[A-Z0-9]{4}$');
+      allow update: if signedIn() && resource.data.storeId == uid() && request.resource.data.storeId == uid()
+        && onlyKeys(['storeId', 'name']) && str(request.resource.data.get('name', ''), 120);
+      allow delete: if (signedIn() && resource.data.storeId == uid()) || isPlatformAdmin();
+    }
+
+    // ---------- platform-level subscription mirror (read by the admin console) ----------
+    match /subscriptions/{sid} {
+      allow read: if (signedIn() && uid() == sid) || isPlatformAdmin();
+      allow create: if (signedIn() && uid() == sid && validNewTrial(sid)) || isPlatformAdmin();
+      allow update: if (signedIn() && uid() == sid && validThreeDIncrement()) || isPlatformAdmin();
+      allow delete: if isPlatformAdmin();
+    }
+
+    // ---------- plan payment submissions: owner submits a UTR, platform admin verifies ----------
+    match /subscriptionRequests/{sid} {
+      allow read: if (signedIn() && uid() == sid) || isPlatformAdmin();
+      // A UTR that a platform admin already approved (recorded in usedUtrs) can never be submitted again,
+      // so one payment cannot be approved twice.
+      allow create, update: if isPlatformAdmin() || (
+        signedIn() && uid() == sid
+        && request.resource.data.status == 'pending'
+        && request.resource.data.businessId == sid
+        && validPlanPair(request.resource.data)
+        && request.resource.data.utr is string && request.resource.data.utr.matches('^[A-Z0-9]{8,22}$')
+        && !exists(/databases/$(database)/documents/usedUtrs/$(request.resource.data.utr))
+        && (resource == null || resource.data.status != 'approved' || resource.data.utr != request.resource.data.utr)
+        && str(request.resource.data.get('storeName', ''), 120) && str(request.resource.data.get('storeCode', ''), 40)
+        && str(request.resource.data.get('email', ''), 254) && str(request.resource.data.get('phone', ''), 20)
+        && request.resource.data.createdAt == request.time
+        && onlyKeys(['businessId', 'storeName', 'storeCode', 'email', 'phone', 'cycle', 'amount', 'utr', 'status', 'createdAt'])
+      );
+      allow delete: if isPlatformAdmin();
+    }
+
+    // ---------- UTRs already approved (written by the admin console in the same batch as the approval) ----------
+    match /usedUtrs/{utr} {
+      allow read: if isPlatformAdmin();
+      allow create: if isPlatformAdmin() && utr.matches('^[A-Z0-9]{8,22}$');
+      allow update, delete: if false;
+    }
+
+    // ---------- support tickets ----------
+    match /supportRequests/{id} {
+      allow create: if signedIn()
+        && request.resource.data.uid == uid()
+        && request.resource.data.type in ['support', 'custom_work_inquiry']
+        && str(request.resource.data.get('message', ''), 4000)
+        && str(request.resource.data.get('whatToBuild', ''), 4000)
+        && str(request.resource.data.get('name', ''), 120)
+        && str(request.resource.data.get('email', ''), 254)
+        && str(request.resource.data.get('phone', ''), 20)
+        && str(request.resource.data.get('businessName', ''), 160)
+        && str(request.resource.data.get('businessId', ''), 128)
+        && str(request.resource.data.get('category', ''), 40)
+        && request.resource.data.status == 'open'
+        && request.resource.data.get('createdAt', 0) is number
+        && onlyKeys(['type', 'uid', 'category', 'name', 'businessId', 'businessName', 'email', 'phone', 'message', 'whatToBuild', 'createdAt', 'status']);
+      allow read: if isPlatformAdmin() || (signedIn() && resource.data.uid == uid());
+      allow update, delete: if isPlatformAdmin();
+    }
+
+    // ---------- platform audit log (written by the admin console) ----------
+    match /adminLog/{id} {
+      allow read: if isPlatformAdmin();
+      allow create: if isPlatformAdmin() && request.resource.data.by == uid();
+      allow update, delete: if false;
+    }
+
+    // ---------- stores ----------
+    match /stores/{sid} {
+      function isOwner() { return signedIn() && uid() == sid; }
+      function staffPath() { return /databases/$(database)/documents/stores/$(sid)/staff/$(request.auth.uid); }
+      function staffDoc() { return get(staffPath()).data; }
+      function isStaff() { return signedIn() && exists(staffPath()) && staffDoc().status == 'active'; }
+      function role() { return staffDoc().role; }
+      function isAdmin() { return isOwner() || (isStaff() && role() == 'admin'); }
+      function member() { return isOwner() || isStaff(); }
+      function subPath() { return /databases/$(database)/documents/stores/$(sid)/meta/subscription; }
+      // Writes are allowed only while a trial or a paid plan is running.
+      function subValid(s) {
+        return (s.status == 'trialing' && nowMs() < s.trialEndsAt) || (s.status == 'active' && nowMs() < s.expiresAt);
+      }
+      function planValid() { return exists(subPath()) && subValid(get(subPath()).data); }
+      function canWrite() { return (isOwner() || (isStaff() && role() != 'auditor')) && planValid(); }
+      // Someone who entered this store's code (their profile points here) may see its name and branches to request access.
+      function userPath() { return /databases/$(database)/documents/users/$(request.auth.uid); }
+      function joining() { return signedIn() && exists(userPath()) && get(userPath()).data.storeId == sid; }
+
+      // Store data (products, ledger, customers, orders, shifts, ...). Only the collections the app uses can be
+      // written; staff, requests and meta have their own rules below. Ledger days (invoices) can only be deleted
+      // by the owner/admins.
+      match /{coll}/{docId} {
+        allow read: if (member() && coll != 'requests') || isPlatformAdmin();
+        allow create, update: if canWrite()
+          && coll in ['products', 'customers', 'suppliers', 'dealers', 'ledger', 'shifts', 'pos', 'dorders', 'transfers', 'held', 'fabricJobs'];
+        allow delete: if canWrite()
+          && coll in ['products', 'customers', 'suppliers', 'dealers', 'shifts', 'pos', 'dorders', 'transfers', 'held', 'fabricJobs', 'ledger']
+          && (coll != 'ledger' || isAdmin());
+      }
+
+      // meta/* — counters and lock are ordinary store data; store profile and subscription have their own rules.
+      match /meta/{docId} {
+        allow read: if member() || isPlatformAdmin();
+        allow write: if canWrite() && docId in ['counters', 'lock'] && (docId != 'lock' || (
+          request.resource.data.keys().hasOnly(['holder', 'expiresAt'])
+          && request.resource.data.holder is string && request.resource.data.holder.size() <= 64
+          && request.resource.data.expiresAt is number && request.resource.data.expiresAt < nowMs() + 3600000));
+      }
+      // Store profile: members and people who asked to join can read it; only admins change it.
+      match /meta/store {
+        allow read: if member() || joining() || isPlatformAdmin();
+        allow write: if isAdmin() && request.resource.data.size() <= 60;
+      }
+      // Subscription: owner creates the 7-day trial once; only a platform admin activates or changes a plan.
+      match /meta/subscription {
+        allow read: if member() || isPlatformAdmin();
+        allow create: if (isOwner() && validNewTrial(sid)) || isPlatformAdmin();
+        allow update: if (isOwner() && validThreeDIncrement()) || isPlatformAdmin();
+        allow delete: if isPlatformAdmin();
+      }
+
+      // Team: only owner/admins approve, change roles or deactivate. An admin can never create another owner.
+      match /staff/{staffId} {
+        allow read: if member() || (signedIn() && uid() == staffId) || isPlatformAdmin();
+        allow create, update: if isAdmin() && staffId != sid
+          && request.resource.data.role in ['admin', 'manager', 'cashier', 'inventory', 'purchase', 'accountant', 'dispatcher', 'auditor']
+          && request.resource.data.get('status', 'active') in ['active', 'inactive']
+          && request.resource.data.size() <= 16;
+        allow delete: if isAdmin();
+      }
+
+      // Access requests: a person may file their own (status pending, never an admin role); admins decide.
+      match /requests/{reqId} {
+        allow read: if isAdmin() || (signedIn() && uid() == reqId);
+        allow create, update: if isAdmin() || (
+          signedIn() && uid() == reqId && joining()
+          && request.resource.data.status == 'pending'
+          && request.resource.data.get('role', 'cashier') in ['manager', 'cashier', 'inventory', 'purchase', 'accountant', 'dispatcher', 'auditor']
+          && str(request.resource.data.get('name', ''), 120) && str(request.resource.data.get('phone', ''), 20)
+          && str(request.resource.data.get('branch', ''), 64) && request.resource.data.get('at', 0) is number
+          && onlyKeys(['name', 'phone', 'role', 'branch', 'at', 'status'])
+        );
+        allow delete: if isAdmin();
+      }
+    }
+  }
+}
