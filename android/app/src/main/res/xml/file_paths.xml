@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Only these two cache folders are ever shared with other apps (camera output + exported files). -->
+<paths>
+    <cache-path name="photos" path="photos/" />
+    <cache-path name="shared" path="shared/" />
+</paths>
