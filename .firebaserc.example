@@ -1,0 +1,11 @@
+{
+  "projects": { "default": "vastranix" },
+  "targets": {
+    "vastranix": {
+      "hosting": {
+        "app": ["vastranix"],
+        "admin": ["vastranix-admin"]
+      }
+    }
+  }
+}
