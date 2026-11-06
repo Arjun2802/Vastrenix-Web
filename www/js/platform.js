@@ -146,7 +146,7 @@ A.forgotPw = async function () {
 function gateJoin() {
   var f = S.f.join || (S.f.join = { code: '', err: '' });
   return '<div class="gate"><div class="box">' +
-    '<div class="between"><div class="rowx">' + logo(36) + '<b style="font-size:20px;letter-spacing:-.04em">vastrenix</b></div><button class="btn ghost sm" data-a="signOut">' + esc(t('sign_out', 'Sign out')) + '</button></div>' +
+    '<div class="between"><div class="rowx">' + logo(36) + '<b style="font-size:20px;letter-spacing:-.04em">vastrenix</b></div><span class="rowx"><button class="btn ghost sm" data-a="openDeleteAccount">' + esc(t('del_acc', 'Delete account')) + '</button><button class="btn ghost sm" data-a="signOut">' + esc(t('sign_out', 'Sign out')) + '</button></span></div>' +
     '<div class="stack sm"><h1 style="font-size:28px">' + esc(t('jn_t', 'Welcome, {n}', { n: ME.name || '' })) + '</h1><p class="muted">' + esc(t('jn_b', 'Set up a new store, or join the store you work at.')) + '</p></div>' +
     '<section class="card pad stack"><div class="rowx"><span class="ic acc">' + icon('store', 19) + '</span><div class="grow"><b>' + esc(t('jn_own', 'I own a store')) + '</b><div class="small muted">' + esc(t('jn_own_b', 'Create your store and invite your team.')) + '</div></div></div>' + busyBtn(t('jn_create', 'Create a new store'), 'createStore', 'primary', '', 'join') + '</section>' +
     '<section class="card pad stack"><div class="rowx"><span class="ic">' + icon('users', 19) + '</span><div class="grow"><b>' + esc(t('jn_staff', 'I work at a store')) + '</b><div class="small muted">' + esc(t('jn_staff_b', 'Ask the owner for the store code (More → Account, or Dealers → Network).')) + '</div></div></div>' +
@@ -189,8 +189,59 @@ function vxExtraMore() {
   return '<section class="stack sm"><div class="sect"><h2>' + esc(t('account', 'Account')) + '</h2></div><div class="card pad stack">' +
     '<div class="between small"><span class="muted">' + esc(t('email', 'Email')) + '</span><b>' + esc((FB_USER && FB_USER.email) || '') + '</b></div>' +
     (st.code ? '<div class="between small"><span class="muted">' + esc(t('store_code', 'Store code')) + '</span><button class="btn soft xs" data-a="copy" data-v="' + esc(st.code) + '">' + icon('copy', 14) + esc(st.code) + '</button></div>' : '') +
-    '<button class="btn danger" data-a="signOut">' + icon('logout', 17) + esc(t('sign_out', 'Sign out')) + '</button></div></section>';
+    '<button class="btn danger" data-a="signOut">' + icon('logout', 17) + esc(t('sign_out', 'Sign out')) + '</button>' +
+    '<button class="btn ghost sm" data-a="openDeleteAccount" style="color:var(--bad)">' + icon('trash', 15) + esc(t('del_acc', 'Delete account')) + '</button></div></section>';
 }
+
+/* ---- Account deletion (Google Play requirement). Web: done right here through /api/account/delete after the
+   user re-enters their password. Android app: opens the website page, which does the same. ---- */
+function delAccUrl() {
+  var b = (typeof billingCfg === 'function' && billingCfg().webAppUrl) || 'https://vastrenix.com';
+  return String(b).replace(/\/+$/, '') + '/delete-account/';
+}
+A.openDeleteAccount = function () {
+  if (IS_NATIVE) { var u = delAccUrl(); if (!nativePost({ cmd: 'open', url: u })) window.open(u, '_blank', 'noopener,noreferrer'); return; }
+  S.f.del = { pass: '', confirm: '', err: '' }; openSheet('deleteAccount');
+};
+function delAccSheet() {
+  var f = S.f.del || (S.f.del = { pass: '', confirm: '', err: '' });
+  var owner = ME.isOwner;
+  return sheetWrap(t('del_acc_t', 'Delete your account'), '<div class="stack lg">' +
+    '<div class="banner bad"><span class="ic bad">' + icon('alert', 18) + '</span><span class="tx"><b>' + esc(t('del_acc_w', 'This can’t be undone')) + '</b><small>' +
+      esc(owner ? t('del_acc_owner', 'Your login and your whole store — items, stock, bills, customers, khata, dealers, staff access and settings — will be deleted for everyone. Remaining paid plan time is not refunded.')
+                : t('del_acc_staff', 'Your login will be deleted and you will lose access to this store. The store’s data stays with the owner.')) + '</small></span></div>' +
+    '<p class="small muted">' + esc(t('del_acc_tip', 'Export any reports or invoices you need first (More → Reports → Export CSV).')) + '</p>' +
+    txtF(t('password', 'Password'), 'f.del.pass', 'type="password" autocomplete="current-password"') +
+    txtF(t('del_acc_type', 'Type DELETE to confirm'), 'f.del.confirm', 'autocomplete="off" autocapitalize="characters" spellcheck="false"', null, f.err) +
+    '</div>', '<button class="btn line" data-a="close">' + esc(t('cancel', 'Cancel')) + '</button>' + busyBtn(t('del_acc_go', 'Delete permanently'), 'doDeleteAccount', 'danger', '', 'del'));
+}
+SHEETS.deleteAccount = delAccSheet;
+A.doDeleteAccount = async function () {
+  var f = S.f.del || {}; f.err = '';
+  if (String(f.confirm || '').trim().toUpperCase() !== 'DELETE') { f.err = t('del_acc_need', 'Type DELETE to confirm.'); schedule(); return; }
+  if (!f.pass) { f.err = t('del_acc_pw', 'Enter your password.'); schedule(); return; }
+  var u = window.FB_USER || (AUTH && AUTH.currentUser); if (!u) return;
+  S.busy = 'del'; schedule();
+  try {
+    try { await u.reauthenticateWithCredential(firebase.auth.EmailAuthProvider.credential(u.email, f.pass)); }
+    catch (e) { throw fail(/wrong|invalid/.test((e && e.code) || '') ? t('del_acc_badpw', 'That password is wrong.') : t('del_acc_reauth', 'Could not confirm your password. Try again.')); }
+    await u.getIdToken(true);
+    await payApi('/api/account/delete', { confirm: 'DELETE' });
+    try { await AUTH.signOut(); } catch (e) { }
+    try { localStorage.clear(); sessionStorage.clear(); } catch (e) { }
+    S.busy = null;
+    alertAndReload();
+  } catch (e) { S.busy = null; f.err = errText(e); schedule(); }
+};
+function alertAndReload() {
+  try { sessionStorage.setItem('vx-acc-deleted', '1'); } catch (e) { }
+  location.replace(location.pathname);
+}
+/* After a deletion the page reloads on the sign-in screen; say what happened. */
+setTimeout(function () {
+  var flag = null; try { flag = sessionStorage.getItem('vx-acc-deleted'); sessionStorage.removeItem('vx-acc-deleted'); } catch (e) { }
+  if (flag) toast(t('del_acc_done', 'Your account has been deleted. Your data has been removed from Vastrenix.'));
+}, 1200);
 
 /* ---- store entry after sign-in ---- */
 function enterStore(sid) {

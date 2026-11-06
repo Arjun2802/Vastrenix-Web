@@ -5,8 +5,8 @@ plugins {
 // ---------------------------------------------------------------------------
 // Version: bump versionCode for every release you upload (Play rejects reused codes).
 // ---------------------------------------------------------------------------
-def appVersionCode = 10
-def appVersionName = "2.0.0"
+def appVersionCode = 13
+def appVersionName = "2.2.0"
 
 // ---------------------------------------------------------------------------
 // Release signing. Never commit the keystore or its passwords.
@@ -33,6 +33,19 @@ android {
         targetSdk 36
         versionCode appVersionCode
         versionName appVersionName
+        // "direct" (APK you share yourself) can take Razorpay payments in the app.
+        // "play" (Google Play) never shows payments, whatever the admin setting — build it with:
+        //   ./gradlew bundleRelease -PvxDistribution=play
+        def dist = (project.findProperty("vxDistribution") ?: "direct").toString()
+        if (!(dist in ["direct", "play"])) throw new GradleException("vxDistribution must be 'direct' or 'play'")
+        buildConfigField "String", "DISTRIBUTION", "\"${dist}\""
+        def payHost = (project.findProperty("vxPaymentHost") ?: "").toString().trim().toLowerCase()
+        if (payHost && !(payHost ==~ /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/)) throw new GradleException("vxPaymentHost must be a plain domain like vastrenix-web.vercel.app")
+        buildConfigField "String", "PAYMENT_HOST", "\"${payHost}\""
+    }
+
+    buildFeatures {
+        buildConfig true
     }
 
     signingConfigs {
@@ -100,4 +113,6 @@ dependencies {
     implementation "androidx.webkit:webkit:1.13.0"
     implementation "androidx.core:core:1.16.0"
     implementation "androidx.activity:activity:1.10.1"
+    // Razorpay Standard Checkout (in-app plan payments). Key secret stays on the server.
+    implementation "com.razorpay:checkout:1.6.40"
 }

@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data:; connect-src 'self' https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://www.googleapis.com; frame-src https://*.firebaseapp.com; object-src 'none'; base-uri 'none'; form-action 'none'">
+  <meta name="referrer" content="no-referrer">
+  <title>Delete your account — Vastrenix</title>
+  <meta name="description" content="How to delete your Vastrenix account and the data linked to it.">
+  <link rel="icon" type="image/png" href="../favicon.png">
+  <link rel="stylesheet" href="../css/site.css">
+</head>
+<body class="doc">
+  <a class="skip" href="#main">Skip to content</a>
+  <header class="top scrolled" id="top">
+    <div class="wrap top-in">
+      <a class="brand" href="../" aria-label="Vastrenix home">
+        <svg class="mark" width="34" height="34" viewBox="0 0 48 48" aria-hidden="true"><rect width="48" height="48" rx="14" fill="#16133A"/><path d="M13 13.5 L24 35 L35 13.5" stroke="#fff" stroke-width="4.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M8.5 22 H28.2 M33.4 22 H39.5" stroke="#8B78FF" stroke-width="3" stroke-linecap="round"/></svg>
+        <span>vastrenix</span>
+      </a>
+    </div>
+  </header>
+
+  <main id="main" class="wrap doc-main">
+    <h1>Delete your Vastrenix account</h1>
+    <p class="lede">You can delete your account and its data at any time. Deletion is immediate and can’t be undone.</p>
+
+    <section class="doc-sec" aria-labelledby="ways-h">
+      <h2 id="ways-h">Three ways to delete</h2>
+      <ol class="doc-steps">
+        <li><b>In the app.</b> Open Vastrenix, go to <b>More → Delete account</b>, confirm your password and type DELETE.</li>
+        <li><b>On this page.</b> Sign in below with your Vastrenix email and password, then confirm.</li>
+        <li><b>By email.</b> Write to <a href="mailto:contact@vastrenix.com?subject=Delete%20my%20Vastrenix%20account">contact@vastrenix.com</a> from the email address on your account, with the subject “Delete my account”. We delete it within 30 days and reply to confirm.</li>
+      </ol>
+    </section>
+
+    <section class="doc-card" aria-labelledby="del-h">
+      <h2 id="del-h">Delete my account now</h2>
+      <div id="del-app">
+        <form id="del-login" class="doc-form" novalidate>
+          <label for="del-email">Email</label>
+          <input class="field" id="del-email" type="email" autocomplete="username" required>
+          <label for="del-pass">Password</label>
+          <input class="field" id="del-pass" type="password" autocomplete="current-password" required>
+          <p class="doc-err" id="del-login-err" role="alert"></p>
+          <button class="btn primary lg" type="submit" id="del-signin">Sign in to continue</button>
+          <button class="btn ghost" type="button" id="del-forgot">Forgot password?</button>
+        </form>
+        <form id="del-confirm" class="doc-form" hidden novalidate>
+          <p>Signed in as <b id="del-who"></b>.</p>
+          <div class="doc-warn">
+            <p><b>This will permanently delete:</b></p>
+            <ul>
+              <li>your login and profile;</li>
+              <li>if you own a store: the whole store — items, stock, bills, customers, khata, dealers, staff access and settings — for everyone who works there;</li>
+              <li>if you’re staff: your access to the store you joined;</li>
+              <li>your support messages.</li>
+            </ul>
+            <p>Any remaining time on a paid plan is not refunded. Download any reports or invoices you need first.</p>
+          </div>
+          <label for="del-type">Type <b>DELETE</b> to confirm</label>
+          <input class="field" id="del-type" autocomplete="off" autocapitalize="characters" spellcheck="false" required>
+          <p class="doc-err" id="del-err" role="alert"></p>
+          <button class="btn danger lg" type="submit" id="del-go">Delete my account permanently</button>
+          <button class="btn ghost" type="button" id="del-cancel">Cancel and sign out</button>
+        </form>
+        <div id="del-done" hidden>
+          <p class="doc-ok" role="status"><b>Your account has been deleted.</b> Your data has been removed from Vastrenix. You can close this page.</p>
+        </div>
+      </div>
+      <noscript><p>This form needs JavaScript. You can also delete your account in the app or by email (see above).</p></noscript>
+    </section>
+
+    <section class="doc-sec" aria-labelledby="keep-h">
+      <h2 id="keep-h">What we keep</h2>
+      <p>Records of plan payments (amount, date and payment reference) are kept as long as tax and accounting law requires, with your name and email removed. Copies may remain in encrypted backups for up to 30 days before they are overwritten. Invoices you already sent to your customers on WhatsApp or as PDFs stay with them.</p>
+      <p>Questions? Read our <a href="../privacy/">privacy policy</a> or write to <a href="mailto:contact@vastrenix.com">contact@vastrenix.com</a>.</p>
+    </section>
+  </main>
+
+  <footer class="foot">
+    <div class="wrap foot-legal"><p>© 2026 Vastrenix. Made in India.</p></div>
+  </footer>
+
+  <script src="../app/vendor/firebase-app-compat.js"></script>
+  <script src="../app/vendor/firebase-auth-compat.js"></script>
+  <script src="../app/js/config.js"></script>
+  <script src="../js/delete-account.js"></script>
+</body>
+</html>

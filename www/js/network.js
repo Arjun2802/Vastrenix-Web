@@ -319,9 +319,14 @@ function billingCfg() {
   return {
     methods: Object.assign({ razorpay: true, upi: true }, c.methods || {}),
     upiId: c.upiId || local.upiId || '', payeeName: c.payeeName || local.payeeName || 'Vastrenix',
-    android: c.android === 'hidden' ? 'hidden' : 'external', webAppUrl: String(c.webAppUrl || local.webAppUrl || '').replace(/\/+$/, ''),
+    android: c.android === 'hidden' || c.android === 'inapp' ? c.android : 'external', webAppUrl: String(c.webAppUrl || local.webAppUrl || '').replace(/\/+$/, ''),
     apiBase: String(local.apiBase || '').replace(/\/+$/, '')
   };
+}
+/* Android app with the Razorpay SDK (APK builds), switched on by the admin (Settings → In the Android app). */
+function nativeInApp(cfg) {
+  cfg = cfg || billingCfg();
+  return !!(IS_NATIVE && cfg.android === 'inapp' && cfg.methods.razorpay && /^https:\/\//.test(cfg.webAppUrl) && window.VX_NATIVE_CAPS && window.VX_NATIVE_CAPS.rzp);
 }
 function plans() {
   var c = (D.billing && D.billing.plans) || {}, out = {};
@@ -369,8 +374,8 @@ function subSheet() {
   if (!ME.isOwner) return sheetWrap(title, '<div class="stack lg">' + head + activeBanner + subNote('lock', t('sub_owner_only', 'Only the store owner can change the subscription. Ask them to subscribe from More → Subscription.')) + '</div>', '');
 
   /* Android app: payment happens on the website (or is hidden for Play Store builds) */
-  if (IS_NATIVE) {
-    if (cfg.android === 'hidden' || !cfg.webAppUrl) {
+  if (IS_NATIVE && !nativeInApp(cfg)) {
+    if (cfg.android === 'hidden' || !cfg.webAppUrl || (window.VX_NATIVE_CAPS && window.VX_NATIVE_CAPS.play)) {
       return sheetWrap(title, '<div class="stack lg">' + head + activeBanner + subNote('info', t('sub_native_hidden', 'Plans are managed on the Vastrenix website. Contact support from More → Help if you need help with your plan.')) + '</div>', '<button class="btn primary lg" data-a="close">' + esc(t('done', 'Done')) + '</button>');
     }
     return sheetWrap(title, '<div class="stack lg">' + head + activeBanner + subNote('globe', t('sub_native_web', 'Plans are bought on the Vastrenix website. Sign in there with the same email; your plan updates here automatically.')) + '</div>',
@@ -400,7 +405,7 @@ function subSheet() {
   var rejected = req && req.status === 'rejected' ? '<div class="banner bad"><span class="ic bad">' + icon('alert', 18) + '</span><span class="tx"><b>' + esc(t('sub_rejected', 'We could not verify your last payment')) + '</b><small>' + esc(req.adminNote || t('sub_rejected_b', 'Check the UTR and submit again, or contact support.')) + '</small></span></div>' : '';
   var extendNote = sub.isActive ? subNote('info', t('sub_extend_note', 'Buying now adds time after your current plan ends — you never lose days.')) : '';
   var foot = (cfg.methods.razorpay ? busyBtn(t('sub_pay_rzp', 'Pay {a}', { a: inr(plan.amount) }), 'payRazorpay', 'primary lg block', '', null) : '') +
-    (cfg.methods.upi ? '<button class="btn ' + (cfg.methods.razorpay ? 'ghost' : 'primary lg') + ' block" data-a="subToPay"' + (S.busy ? ' disabled' : '') + '>' + (cfg.methods.razorpay ? esc(t('sub_upi_alt', 'Or pay by UPI QR and enter the UTR')) : esc(t('sub_continue', 'Continue — {a} {p}', { a: inr(plan.amount), p: t(PLAN_TEXT[sel].per[0], PLAN_TEXT[sel].per[1]) }))) + '</button>' : '');
+    (cfg.methods.upi && !IS_NATIVE ? '<button class="btn ' + (cfg.methods.razorpay ? 'ghost' : 'primary lg') + ' block" data-a="subToPay"' + (S.busy ? ' disabled' : '') + '>' + (cfg.methods.razorpay ? esc(t('sub_upi_alt', 'Or pay by UPI QR and enter the UTR')) : esc(t('sub_continue', 'Continue — {a} {p}', { a: inr(plan.amount), p: t(PLAN_TEXT[sel].per[0], PLAN_TEXT[sel].per[1]) }))) + '</button>' : '');
   return sheetWrap(title,
     '<div class="stack lg">' + head + activeBanner + rejected + extendNote +
       '<div class="stack sm" role="radiogroup" aria-label="' + esc(t('choose_plan', 'Choose a plan')) + '">' + avail.map(function (k) { return planCard(k, sel); }).join('') + '</div>' +
@@ -426,8 +431,10 @@ async function payApi(path, body) {
   return j;
 }
 A.payRazorpay = async function () {
-  if (S.busy || IS_NATIVE || !billingCfg().methods.razorpay) return; /* the Android app never runs Checkout */
+  var cfg = billingCfg();
+  if (S.busy || !cfg.methods.razorpay) return;
   var avail = activePlans(), cycle = avail.indexOf(S.subCycle) >= 0 ? S.subCycle : (avail.indexOf('quarterly') >= 0 ? 'quarterly' : avail[0]);
+  if (IS_NATIVE) { if (nativeInApp(cfg)) await payInApp(cfg, cycle); return; }
   S.busy = 'rzp'; schedule();
   try {
     var o = await payApi('/api/razorpay/create-order', { cycle: cycle });
@@ -459,6 +466,24 @@ A.payRazorpay = async function () {
   } catch (e) { toast(errText(e), 'bad'); }
   S.busy = null; schedule();
 };
+/* Android app: the Razorpay SDK shows the checkout; the payment server prices the order and verifies the payment. */
+async function payInApp(cfg, cycle) {
+  S.busy = 'rzp'; schedule();
+  try {
+    var u = window.FB_USER || (window.AUTH && window.AUTH.currentUser);
+    if (!u) throw fail(t('err_signin', 'Sign in again to continue.'));
+    var tok = await u.getIdToken();
+    var r = await new Promise(function (resolve) {
+      window.vxNativePayResult = function (json) { window.vxNativePayResult = null; try { resolve(JSON.parse(json)); } catch (e) { resolve({ status: 'error' }); } };
+      if (!nativePost({ cmd: 'rzpPay', apiBase: cfg.webAppUrl, cycle: cycle, token: tok })) { window.vxNativePayResult = null; resolve({ status: 'error', message: t('rzp_update_app', 'Update the app to pay inside it, or pay on the website.') }); }
+    });
+    if (r.status === 'success') { closeSheet(); toast(t('rzp_ok', 'Payment successful. Your plan is active until {d}.', { d: fmtDY(r.expiresAt) })); }
+    else if (r.status === 'held') { closeSheet(); toast(t('rzp_held', 'Payment received. Your plan needs a quick check by our team — contact support if it isn’t active soon.')); }
+    else if (r.status === 'pending') toast(t('rzp_pending', 'Payment received — confirming it. Your plan will update in a minute. If it doesn’t, contact support with your payment ID.'), 'bad');
+    else if (r.status !== 'cancelled') toast(r.message || t('rzp_failed_generic', 'Payment failed. Please try again.'), 'bad');
+  } catch (e) { toast(errText(e), 'bad'); }
+  S.busy = null; schedule();
+}
 A.subOpenWeb = function () {
   var u = billingCfg().webAppUrl; if (!/^https:\/\//.test(u)) return;
   var url = u + '/app/#subscribe';
@@ -748,7 +773,7 @@ function subPrivacy() {
 
       '<section class="card pad stack" style="gap:10px;border-left:3px solid var(--ok)">' +
         '<h3 style="margin:0;font-size:16px">' + esc(t('p_s7_t', '7. Statutory Data Retention & GST Compliance')) + '</h3>' +
-        '<p class="small muted" style="margin:0;line-height:1.6">Under Section 36 of the Central Goods and Services Tax (CGST) Act, 2017, registered businesses are legally obligated to maintain invoices, credit/debit notes, and books of account for at least <b>72 months (6 years)</b> from the due date of furnishing the annual return for the relevant year. To ensure our users remain compliant with tax authorities, sales invoices and transaction logs are retained for this mandatory statutory period.</p>' +
+        '<p class="small muted" style="margin:0;line-height:1.6">Under Section 36 of the CGST Act, 2017, a registered business must keep its tax invoices, credit/debit notes and books of account for <b>72 months (6 years)</b>. This duty belongs to the store owner: Vastrenix keeps your records while your account exists and you can export them any time (Reports → Export CSV, invoice PDFs). Export them before deleting your account. You can delete your account any time from More → Delete account or at vastrenix.com/delete-account.</p>' +
       '</section>' +
 
       '<section class="card pad stack" style="gap:10px">' +

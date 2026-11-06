@@ -12,6 +12,13 @@
     <queries>
         <intent><action android:name="android.media.action.IMAGE_CAPTURE" /></intent>
         <intent><action android:name="android.intent.action.VIEW" /><data android:scheme="upi" /></intent>
+        <intent><action android:name="android.intent.action.VIEW" /><data android:scheme="upi" android:host="pay" /></intent>
+        <!-- UPI apps opened by Razorpay Checkout (intent flow) -->
+        <package android:name="com.google.android.apps.nbu.paisa.user" />
+        <package android:name="com.phonepe.app" />
+        <package android:name="net.one97.paytm" />
+        <package android:name="in.org.npci.upiapp" />
+        <package android:name="in.amazon.mShop.android.shopping" />
         <intent><action android:name="android.intent.action.VIEW" /><data android:scheme="https" /></intent>
         <intent><action android:name="android.intent.action.SEND" /><data android:mimeType="*/*" /></intent>
         <package android:name="com.whatsapp" />

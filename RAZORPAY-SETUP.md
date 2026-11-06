@@ -39,6 +39,7 @@ Vercel → project → **Settings → Environment Variables** → har ek ke liye
 | `RAZORPAY_KEY_SECRET` | Step 2 ka Key Secret |
 | `RAZORPAY_WEBHOOK_SECRET` | koi bhi lamba random password (Step 5 me yahi daalna hai) |
 | `FIREBASE_SERVICE_ACCOUNT` | Step 3 ki JSON file ka poora content |
+| `ADMIN_EMAILS` | aapka admin email (ek se zyada ho to comma se alag) — isse admin panel me khud admin ban sakte hain |
 | `ALLOWED_ORIGINS` | *(optional)* sirf tab jab app kisi aur domain se API call kare, comma se alag |
 
 Save karke **Deployments → Redeploy** karein (env variables naye deploy me hi lagte hain).
@@ -66,8 +67,26 @@ npm run deploy:rules
 1. **Payment server** box me sab "Set" dikhna chahiye (Razorpay keys, webhook secret). "Missing" ho to Step 4 dekhein.
 2. **Plans and prices** — naam, price (₹), din, available. Badli hui price sirf naye payments par lagti hai.
 3. **How stores pay** — Razorpay on; manual UPI chahein to on/off; UPI ID.
-4. **In the Android app** — APK (direct download) ke liye *Open the website to pay*; Google Play build ke liye *Hide payments in the app* (Play ki billing policy ki wajah se). **Website address** bhi bharein.
+4. **In the Android app** — teen options:
+   - *Pay inside the app with Razorpay* — APK (direct download) me Razorpay ka official SDK app ke andar khulta hai (UPI apps, cards, netbanking). Iske liye APK **2.1+** hona chahiye aur build me `vxPaymentHost` set hona chahiye (neeche dekhein).
+   - *Open the website to pay* — app website kholta hai, wahan payment hota hai.
+   - *Hide payments in the app* — sirf plan status dikhta hai.
+   **Website address** zaroor bharein (app isi address par payment server ko call karta hai).
 5. **Save settings**. Landing page aur app dono nayi prices turant dikhayenge.
+
+## Step 7b — Android app me in-app payment
+1. `android/gradle.properties` me apni website ka domain likhein (sirf domain, https:// ke bina):
+   ```
+   vxPaymentHost=vastrenix-web.vercel.app
+   ```
+   Security: app aapke login token ko **sirf isi domain** par bhejega. Khaali chhodne par app website wala tareeka use karta hai.
+2. APK build karein (`./gradlew assembleRelease` ya GitHub Actions). Version 2.1.0 (code 11).
+3. Admin → Settings → In the Android app → **Pay inside the app with Razorpay** → Save.
+4. **Google Play ke liye** alag build banayein — isme payment kabhi nahi dikhega, admin setting chahe kuch ho:
+   ```
+   ./gradlew bundleRelease -PvxDistribution=play
+   ```
+   Purane APK (2.0) wale users ko apne aap website wala button dikhta rahega.
 
 ## Step 8 — Test payment (Test Mode)
 1. Website `/app/` par ek test store banayein → More → Subscription → **Pay**.
@@ -82,6 +101,6 @@ Razorpay me Live Mode → live keys generate karein → Vercel me `RAZORPAY_KEY_
 
 ## Zaroori baatein
 - **Vercel plan:** Vercel ka free *Hobby* plan sirf non-commercial use ke liye hai. Paise lene wali site ke liye unki terms ke hisaab se **Pro** plan lena padega.
-- **Google Play:** Play Store app me digital subscription bechne ke liye Google Play Billing (ya India me alternative billing enrollment) chahiye. Isliye Play build ke liye Settings me *Hide payments in the app* rakhein.
+- **Google Play:** Play Store app me digital subscription Razorpay se bechna Play ki policy ke khilaf hai (Google Play Billing ya India alternative-billing enrollment chahiye). Isliye Play wala build hamesha `-PvxDistribution=play` se banayein — usme payment chhupa rehta hai. In-app Razorpay sirf direct-download APK ke liye hai.
 - **Kya server check karta hai:** price hamesha server tay karta hai (app se aayi price kabhi nahi); signature constant-time compare; Razorpay se payment ka order, amount, currency aur status dobara confirm; ek order se plan sirf ek baar badhta hai (verify + webhook + retry sab milke bhi); sirf store owner apne store ke liye order bana sakta hai; 10 minute me max 6 orders per user; refund sirf platform admin.
 - **Agar paisa kata par plan nahi badha:** webhook 1–2 minute me plan chalu kar deta hai. Phir bhi na ho to Admin → Payments → Razorpay me order dekhein ("Not paid" + error hover), aur Store → Manage se manually activate kar sakte hain.

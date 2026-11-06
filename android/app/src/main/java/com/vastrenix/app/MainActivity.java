@@ -44,6 +44,10 @@ import androidx.webkit.WebViewAssetLoader;
 import androidx.webkit.WebViewCompat;
 import androidx.webkit.WebViewFeature;
 
+import com.razorpay.Checkout;
+import com.razorpay.PaymentData;
+import com.razorpay.PaymentResultWithDataListener;
+
 import org.json.JSONObject;
 
 import java.io.File;
@@ -69,7 +73,7 @@ import java.util.regex.Pattern;
  *  - Any navigation away from the app origin is handed to another app (browser, WhatsApp, UPI app) — never loaded
  *    inside this WebView.
  */
-public class MainActivity extends ComponentActivity {
+public class MainActivity extends ComponentActivity implements PaymentResultWithDataListener {
     private static final String TAG = "Vastrenix";
     static final String APP_HOST = "appassets.androidplatform.net";
     static final String APP_ORIGIN = "https://" + APP_HOST;
@@ -84,6 +88,10 @@ public class MainActivity extends ComponentActivity {
     private Uri pendingCameraUri;
     private final Handler main = new Handler(Looper.getMainLooper());
     private final ExecutorService io = Executors.newSingleThreadExecutor();
+
+    /* In-app Razorpay payment in progress (one at a time). The token lives only for this payment. */
+    private boolean payInFlight;
+    private String payApiBase, payToken, payOrderId;
 
     private final ActivityResultLauncher<Intent> pickFile = registerForActivityResult(
             new ActivityResultContracts.StartActivityForResult(), result -> {
@@ -104,6 +112,7 @@ public class MainActivity extends ComponentActivity {
     protected void onCreate(@Nullable Bundle savedInstanceState) {
         EdgeToEdge.enable(this);
         super.onCreate(savedInstanceState);
+        Checkout.preload(getApplicationContext());
 
         root = new FrameLayout(this);
         root.setBackgroundColor(getColor(R.color.window_bg));
@@ -176,6 +185,17 @@ public class MainActivity extends ComponentActivity {
             }
 
             @Override
+            public void onPageFinished(WebView view, String url) {
+                super.onPageFinished(view, url);
+                // Tell the web app this build can take Razorpay payments natively.
+                if (url != null && url.startsWith(APP_ORIGIN + "/")) {
+                    boolean play = "play".equals(BuildConfig.DISTRIBUTION);
+                    boolean rzp = !play && !BuildConfig.PAYMENT_HOST.isEmpty();
+                    view.evaluateJavascript("window.VX_NATIVE_CAPS={rzp:" + rzp + ",play:" + play + "}", null);
+                }
+            }
+
+            @Override
             public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
                 Uri u = request.getUrl();
                 if ("https".equals(u.getScheme()) && APP_HOST.equals(u.getHost())) return false;
@@ -233,6 +253,9 @@ public class MainActivity extends ComponentActivity {
                     break;
                 case "open":
                     openExternal(Uri.parse(m.optString("url")));
+                    break;
+                case "rzpPay":
+                    startInAppPayment(m.optString("apiBase"), m.optString("cycle"), m.optString("token"));
                     break;
                 case "ui":
                     applySystemBars(m.optBoolean("dark", false), m.optString("bg", ""));
@@ -407,6 +430,123 @@ public class MainActivity extends ComponentActivity {
     }
 
     // ------------------------------------------------------------------ lifecycle
+    // ------------------------------------------------------------------ in-app payments (Razorpay SDK)
+    private void startInAppPayment(String apiBaseRaw, String cycle, String token) {
+        String safe = InAppPayments.safeApiBase(apiBaseRaw);
+        // The login token may only ever go to the payment host baked into this build.
+        final String apiBase = safe != null && !BuildConfig.PAYMENT_HOST.isEmpty() && BuildConfig.PAYMENT_HOST.equals(Uri.parse(safe).getHost()) ? safe : null;
+        if (apiBase == null || !InAppPayments.CYCLE.matcher(cycle == null ? "" : cycle).matches()
+                || !InAppPayments.TOKEN.matcher(token == null ? "" : token).matches()) {
+            sendPayResult("error", "Payment could not start. Update the app or contact support.", 0);
+            return;
+        }
+        if ("play".equals(BuildConfig.DISTRIBUTION)) { sendPayResult("error", "Payments are not available in this version of the app.", 0); return; }
+        if (payInFlight) { sendPayResult("error", "A payment is already in progress.", 0); return; }
+        payInFlight = true;
+        payApiBase = apiBase; payToken = token; payOrderId = null;
+        io.execute(() -> {
+            try {
+                JSONObject req = new JSONObject().put("cycle", cycle);
+                InAppPayments.Result r = InAppPayments.post(apiBase, "/api/razorpay/create-order", token, req);
+                if (!r.ok()) { finishPayment("error", r.error("Could not start the payment. Please try again."), 0); return; }
+                JSONObject o = r.body;
+                String keyId = o.optString("keyId"), orderId = o.optString("orderId");
+                if (!InAppPayments.KEY_ID.matcher(keyId).matches() || !InAppPayments.ORDER_ID.matcher(orderId).matches()) {
+                    finishPayment("error", "The payment server sent an invalid order.", 0); return;
+                }
+                JSONObject plan = o.optJSONObject("plan");
+                JSONObject prefill = o.optJSONObject("prefill");
+                JSONObject opts = new JSONObject()
+                        .put("name", "Vastrenix")
+                        .put("description", ((plan != null ? plan.optString("label", "Plan") : "Plan") + " · " + o.optString("storeName", "")).trim())
+                        .put("order_id", orderId)
+                        .put("currency", o.optString("currency", "INR"))
+                        .put("amount", o.optLong("amount"))
+                        .put("theme", new JSONObject().put("color", "#5B3DF5"))
+                        .put("retry", new JSONObject().put("enabled", true).put("max_count", 3));
+                if (prefill != null) {
+                    JSONObject pf = new JSONObject();
+                    if (prefill.optString("email").length() > 0) pf.put("email", prefill.optString("email"));
+                    if (prefill.optString("contact").length() > 0) pf.put("contact", prefill.optString("contact"));
+                    if (prefill.optString("name").length() > 0) pf.put("name", prefill.optString("name"));
+                    opts.put("prefill", pf);
+                }
+                payOrderId = orderId;
+                main.post(() -> {
+                    try {
+                        Checkout co = new Checkout();
+                        co.setKeyID(keyId);
+                        co.open(MainActivity.this, opts);
+                    } catch (Exception e) {
+                        Log.w(TAG, "Razorpay checkout failed to open", e);
+                        finishPayment("error", "Could not open the payment screen.", 0);
+                    }
+                });
+            } catch (Exception e) {
+                Log.w(TAG, "create-order failed", e);
+                finishPayment("error", "Connection problem. Check your internet and try again.", 0);
+            }
+        });
+    }
+
+    /** Razorpay SDK: payment succeeded on the gateway — the server must still verify it before the plan changes. */
+    public void onPaymentSuccess(String razorpayPaymentId, PaymentData data) {
+        final String apiBase = payApiBase, token = payToken, orderId = payOrderId;
+        final String paymentId = data != null && data.getPaymentId() != null ? data.getPaymentId() : razorpayPaymentId;
+        final String signature = data != null ? data.getSignature() : null;
+        final String gotOrder = data != null && data.getOrderId() != null ? data.getOrderId() : orderId;
+        if (apiBase == null || token == null || paymentId == null || signature == null || gotOrder == null
+                || !gotOrder.equals(orderId) || !InAppPayments.PAYMENT_ID.matcher(paymentId).matches()) {
+            finishPayment("pending", "Payment received. Your plan will update in a minute.", 0);
+            return;
+        }
+        io.execute(() -> {
+            try {
+                JSONObject body = new JSONObject().put("razorpay_order_id", gotOrder).put("razorpay_payment_id", paymentId).put("razorpay_signature", signature);
+                InAppPayments.Result r = InAppPayments.post(apiBase, "/api/razorpay/verify", token, body);
+                if (r.ok()) finishPayment(r.body.optBoolean("held") ? "held" : "success", "", r.body.optLong("expiresAt"));
+                else finishPayment("pending", r.error("Payment received. Your plan will update in a minute."), 0);
+            } catch (Exception e) {
+                finishPayment("pending", "Payment received. Your plan will update in a minute.", 0);
+            }
+        });
+    }
+
+    /** PaymentResultWithDataListener error callback. */
+    public void onPaymentError(int code, String response, PaymentData data) { handlePaymentError(code, response); }
+
+    /** Same callback as declared by older SDK interfaces (kept so either signature compiles). */
+    public void onPaymentError(int code, String response) { handlePaymentError(code, response); }
+
+    private void handlePaymentError(int code, String response) {
+        if (code == Checkout.PAYMENT_CANCELED) { finishPayment("cancelled", "", 0); return; }
+        String msg = "Payment failed. Please try again.";
+        try {
+            JSONObject j = new JSONObject(response == null ? "{}" : response);
+            JSONObject err = j.optJSONObject("error");
+            String d = err != null ? err.optString("description") : j.optString("description");
+            if (d != null && !d.isEmpty() && d.length() < 200) msg = "Payment failed: " + d;
+        } catch (Exception ignored) { }
+        if (code == Checkout.NETWORK_ERROR) msg = "Network problem during payment. If money was deducted, your plan will update automatically.";
+        finishPayment("error", msg, 0);
+    }
+
+    private void finishPayment(String status, String message, long expiresAt) {
+        main.post(() -> {
+            payInFlight = false;
+            payToken = null; payApiBase = null; payOrderId = null;
+            sendPayResult(status, message, expiresAt);
+        });
+    }
+
+    private void sendPayResult(String status, String message, long expiresAt) {
+        try {
+            JSONObject r = new JSONObject().put("status", status).put("message", message == null ? "" : message).put("expiresAt", expiresAt);
+            String js = "window.vxNativePayResult&&window.vxNativePayResult(" + JSONObject.quote(r.toString()) + ")";
+            main.post(() -> { if (webView != null) webView.evaluateJavascript(js, null); });
+        } catch (Exception ignored) { }
+    }
+
     private void toast(String msg) { main.post(() -> Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()); }
 
     @Override

@@ -118,3 +118,4 @@ textarea.in{height:auto;min-height:80px;padding:10px 12px;resize:vertical}
 .toast{padding:11px 14px;border-radius:12px;background:#0E0E12;color:#fff;font-size:13.5px;font-weight:500;box-shadow:0 12px 30px rgba(14,14,18,.3);animation:fd .15s ease}
 .toast.bad{background:#C8283C}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+.btn.ghost{background:none;color:var(--accent-text)}.btn.ghost:hover{background:var(--accent-soft)}

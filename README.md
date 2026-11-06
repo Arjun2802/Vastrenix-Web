@@ -35,15 +35,18 @@ POS billing, garment stock, GST invoices, customer dues, dealer orders and staff
 
 ## 2. Make yourself a platform admin
 
-Admin access is a Firebase custom claim, checked by the security rules.
+**Easiest (no terminal):** this needs the payment server on Vercel, with `FIREBASE_SERVICE_ACCOUNT` set (see RAZORPAY-SETUP.md).
+1. In Vercel → Settings → Environment Variables, add `ADMIN_EMAILS` = your email (comma-separate several). Redeploy.
+2. Open `https://<your-site>/admin/` → **New admin? Create account**. Use that email and a password of at least 10 characters.
+3. Open the verification email (check spam) and click the link.
+4. Back on the admin page, press **I have verified my email — activate**. You're in.
 
-1. Create a normal account for yourself (sign up in the store app or in Firebase Console → Authentication → Add user).
-2. Google Cloud Console → IAM → **Service accounts** → firebase-adminsdk → **Keys → Add key (JSON)**. Save it **outside** this folder.
-3. Run:
-   ```bash
-   GOOGLE_APPLICATION_CREDENTIALS=~/secure/vastrenix-sa.json npm run set-admin -- you@yourcompany.com
-   ```
-4. **Delete that key** in Google Cloud once you're done. You only need it again to add or remove admins.
+The server grants admin only to **verified** emails on the list, so nobody can claim it by signing up with your address first. To remove an admin, take the email out of `ADMIN_EMAILS` and run `node scripts/set-admin.js <email> --revoke`.
+
+**Alternative (terminal):**
+```bash
+GOOGLE_APPLICATION_CREDENTIALS=~/secure/vastrenix-sa.json npm run set-admin -- you@yourcompany.com
+```
 
 ## 3. Run locally
 
@@ -80,6 +83,8 @@ keyAlias=upload
 keyPassword=…
 ```
 Then **Build → Generate Signed App Bundle / APK**, or `npm run android:release`.
+
+**In-app Razorpay (direct-download APK):** set `vxPaymentHost` in `android/gradle.properties` to your website's domain. **Google Play build:** `./gradlew bundleRelease -PvxDistribution=play` (payments hidden). See RAZORPAY-SETUP.md.
 
 **Before every release:** bump `appVersionCode` (and `appVersionName`) in `android/app/build.gradle`.
 For the Play Store, upload the **AAB** and enrol in **Play App Signing**.
@@ -120,6 +125,10 @@ The APK contains only the store app; the admin console is never bundled into it.
 5. Everything is managed in the admin console. **Settings** controls plan names, prices, durations, which plans are available, the payment methods, your UPI ID and how the Android app handles payments. **Payments** shows every Razorpay payment, with full refunds that can also take back the plan time. **Stores** lets you extend trials, activate plans manually and suspend stores. Every action is written to the append-only **audit log**.
 
 Setup: **RAZORPAY-SETUP.md**. Payment server tests: `node --test tests/api.test.js`.
+
+## Account deletion
+
+Users can delete their account in the app (**More → Delete account**), at `/delete-account/` on the website, or by email. The server (`api/account/delete.js`) requires a sign-in from the last 15 minutes and the word DELETE. It removes the login, profile, support tickets and, for owners, the whole store; staff lose access only. Razorpay payment records are kept without name or email. Use `https://<your-site>/delete-account/` as the **Delete account URL** in Play Console → Data safety.
 
 ## Roles
 

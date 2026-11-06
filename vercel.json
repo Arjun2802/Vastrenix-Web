@@ -91,6 +91,11 @@
       "source": "/privacy",
       "destination": "/privacy/",
       "permanent": true
+    },
+    {
+      "source": "/delete-account",
+      "destination": "/delete-account/",
+      "permanent": true
     }
   ]
 }

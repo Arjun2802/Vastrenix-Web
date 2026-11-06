@@ -281,7 +281,7 @@ function vHome() {
   }
   var held = vals(D.held);
   var att = [];
-  if (D.loaded.products && low.length && allowed('lowstock')) att.push(['lowstock', 'bad', 'alert', t('att_low', 'Low stock: {n} variants', { n: low.length }), t('att_low_s', '{n} out of stock', { n: low.filter(function (x) { return x.out; }).length })]);
+  if (D.loaded.products && low.length && allowed('lowstock')) att.push(['lowstock', 'bad', 'alert', (low.length === 1 ? t('att_low1', 'Low stock: 1 item') : t('att_low', 'Low stock: {n} variants', { n: low.length })), t('att_low_s', '{n} out of stock', { n: low.filter(function (x) { return x.out; }).length })]);
   if (D.loaded.customers && dueC.length && allowed('dues')) att.push(['dues', 'warn', 'wallet', t('att_due', '{amt} store credit due', { amt: inr(dueT) }), t('att_due_s', '{n} customers', { n: dueC.length })]);
   if (D.loaded.dorders && (newDo.length || toPack.length) && allowed('dealers')) att.push(['dealers', 'acc', 'truck', t('att_do', '{n} new dealer orders', { n: newDo.length }), t('att_do_s', '{n} accepted orders to pack', { n: toPack.length })]);
   if (D.loaded.pos && openPo.length && allowed('purchases')) att.push(['purchases', '', 'package', t('att_po', '{n} purchase orders open', { n: openPo.length }), t('att_po_s', 'Stock rises when goods are received')]);

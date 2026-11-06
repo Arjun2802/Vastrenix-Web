@@ -109,12 +109,12 @@ Vastrenix features a **B2B Dealer Network** that allows clothing retailers to co
 
 Data retention in Vastrenix is governed by operational necessity and mandatory statutory compliance under Indian tax law:
 
-- **Statutory Retention of Financial & Tax Records (6 Years / 72 Months):**  
-  Under **Section 36 of the Central Goods and Services Tax (CGST) Act, 2017**, every registered taxable person is required to maintain true and correct accounts and records (including tax invoices, bills of supply, credit/debit notes, and inventory records) for at least **72 months (6 years)** from the due date of furnishing the annual return for the financial year pertaining to such accounts and records. In compliance with Indian tax regulations, posted sales invoices, credit notes, and associated financial ledger records cannot be permanently purged during this statutory period.
-- **Account & Operational Data:**  
-  Non-financial operational records, staff accounts, draft documents, and merchant configuration settings are retained for as long as the merchant maintains an active account with Vastrenix, or until a formal deletion request is executed.
-- **Inactive Accounts:**  
-  Upon account termination or cancellation, active subscriptions transition to expired status. Merchants retain read-only access to download past tax invoices and records as mandated by law.
+- **Your GST records are yours to keep:**
+  Under **Section 36 of the Central Goods and Services Tax (CGST) Act, 2017**, a registered business must keep its tax invoices, credit/debit notes and stock records for **72 months (6 years)** from the due date of the annual return. This duty belongs to the store owner. Vastrenix keeps your records for as long as your account exists and lets you export them (Reports → Export CSV, invoice PDFs) at any time — **export them before deleting your account**.
+- **Account & Operational Data:**
+  Kept while your account is active. When a trial or plan ends, the store stays readable so you can still download your invoices and records.
+- **Account Deletion:**
+  You can delete your account at any time in the app (**More → Delete account**), at **[vastrenix.com/delete-account](https://vastrenix.com/delete-account/)**, or by emailing [contact@vastrenix.com](mailto:contact@vastrenix.com). Deletion removes your login, profile and — for store owners — the entire store (items, bills, customers, staff access and settings) immediately. Records of plan payments made to Vastrenix are kept as our own accounting law requires, with your name and email removed. Encrypted backups are overwritten within 30 days.
 
 ---
 
@@ -124,7 +124,7 @@ In accordance with India’s **Digital Personal Data Protection Act, 2023 (DPDPA
 
 1. **Right to Access & Summary:** You have the right to request a summary of the personal data held about you and the processing activities undertaken.
 2. **Right to Correction & Updating:** You have the right to correct inaccurate, outdated, or incomplete personal data. Store owners and staff can update their business profile, product details, and contact information directly in the application settings.
-3. **Right to Erasure / Deletion:** You have the right to request the erasure of your personal data. We will delete or anonymize eligible personal information upon verification, **except** where retention is mandated by law (such as the 6-year GST invoice retention rule stipulated under Section 36 of the CGST Act).
+3. **Right to Erasure / Deletion:** You have the right to request the erasure of your personal data. You can delete your account yourself at any time (see Section 7). We delete or anonymise your personal information, except records of payments made to Vastrenix that our own accounting obligations require us to keep.
 4. **Right to Grievance Redressal:** If you have questions, concerns, or unresolved issues regarding the handling of your data, you may lodge a formal grievance with our dedicated Grievance Desk.
 
 ### How to Exercise Your Rights:

@@ -193,7 +193,7 @@ A.saveCount = async function () {
     var day = dayKey(now); await ensureDay(day); var a = {}; a[uid('a')] = { at: now, kind: 'count', pid: f.pid, name: p.name, loc: f.loc, changes: ch, by: ME.id || '' }; await patch('ledger/' + day, { adj: a });
     return ch.length;
   });
-  if (ok) { S.f.cnt = null; closeSheet(); toast(ok === 'none' ? t('count_same', 'Count matches the system') : t('count_saved', 'Stock updated for {n} variants', { n: ok })); }
+  if (ok) { S.f.cnt = null; closeSheet(); toast(ok === 'none' ? t('count_same', 'Count matches the system') : (ok === 1 ? t('count_saved1', 'Stock updated for 1 item') : t('count_saved', 'Stock updated for {n} variants', { n: ok }))); }
 };
 
 /* ===================== LOW STOCK ===================== */

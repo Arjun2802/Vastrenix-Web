@@ -272,3 +272,26 @@ p{margin:0}
 
 .plans.two{grid-template-columns:repeat(2,minmax(0,1fr));max-width:820px}
 @media (max-width:960px){.plans.two{grid-template-columns:1fr}}
+
+/* ---------- document pages (account deletion) ---------- */
+.doc-main{max-width:760px;padding-top:clamp(40px,7vw,80px);padding-bottom:clamp(56px,8vw,96px)}
+.doc-main h1{font-size:clamp(2.2rem,5vw,3.4rem);font-weight:700;line-height:1.04;letter-spacing:-.035em}
+.doc-main .lede{margin-top:16px}
+.doc-sec{margin-top:44px}
+.doc-sec h2,.doc-card h2{font-size:24px;font-weight:600;letter-spacing:-.02em}
+.doc-sec p{margin-top:12px;color:var(--ink-2)}
+.doc-steps{margin:16px 0 0;padding-left:22px;display:grid;gap:12px;color:var(--ink-2)}
+.doc-steps b{color:var(--ink)}
+.doc-card{margin-top:40px;background:var(--white);border:1px solid var(--line);border-radius:22px;padding:clamp(20px,4vw,32px)}
+.doc-form{display:flex;flex-direction:column;gap:8px;margin-top:18px;max-width:440px}
+.doc-form label{font-size:14px;font-weight:600;margin-top:8px}
+.field{height:48px;border-radius:12px;border:1.5px solid #CBC8DD;background:var(--white);padding:0 14px;font:400 16px/1 var(--body);color:var(--ink)}
+.field:focus{outline:none;border-color:var(--violet);box-shadow:0 0 0 4px var(--violet-soft)}
+.doc-form .btn{margin-top:10px;width:100%}
+.btn.danger{background:#B0222F;color:#fff}.btn.danger:hover{background:#8F1A25}
+.btn[disabled]{opacity:.5;pointer-events:none}
+.doc-err{min-height:1.2em;color:#B0222F;font-size:14px;font-weight:500}
+.doc-warn{margin-top:6px;padding:16px 18px;border-radius:14px;background:#FDEBEE;color:#5A1620;font-size:15px}
+.doc-warn ul{margin:8px 0;padding-left:20px;display:grid;gap:4px}
+.doc-ok{margin-top:18px;padding:16px 18px;border-radius:14px;background:#E3F5EE;color:#0B4A35}
+[hidden]{display:none!important}

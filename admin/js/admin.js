@@ -78,6 +78,8 @@
   var unsub = [];
 
   function toast(msg, bad) {
+    var box = document.getElementById('toasts');
+    if ([].some.call(box.children, function (c) { return c.textContent === msg; })) return; /* don't stack the same message */
     var t = h('div', { class: 'toast' + (bad ? ' bad' : ''), text: msg });
     document.getElementById('toasts').appendChild(t);
     setTimeout(function () { t.remove(); }, bad ? 6000 : 3500);
@@ -95,7 +97,7 @@
       if (!u) { ME = null; renderLogin(); return; }
       try {
         var tok = await u.getIdTokenResult(true);
-        if (tok.claims.platformAdmin !== true) { await auth.signOut(); renderLogin('This account is not a platform admin.'); return; }
+        if (tok.claims.platformAdmin !== true) { renderActivate(u); return; }
         ME = { uid: u.uid, email: u.email };
         watchAll(); render();
       } catch (e) { renderLogin(errMsg(e)); }
@@ -103,23 +105,73 @@
   }
   function renderFatal(msg) { clear(document.getElementById('root')).className = 'login'; document.getElementById('root').appendChild(h('div', { class: 'login-box' }, brand(), h('p', { class: 'err', text: msg }))); }
 
-  function renderLogin(err) {
+  function renderLogin(err, mode) {
+    var up = mode === 'up';
     var root = clear(document.getElementById('root')); root.className = 'login';
     var email = h('input', { class: 'in', type: 'email', autocomplete: 'username', id: 'em', required: true });
-    var pass = h('input', { class: 'in', type: 'password', autocomplete: 'current-password', id: 'pw', required: true });
+    var pass = h('input', { class: 'in', type: 'password', autocomplete: up ? 'new-password' : 'current-password', id: 'pw', required: true, minlength: up ? 10 : null });
     var errEl = h('p', { class: 'err', text: err || '' });
-    var btn = h('button', { class: 'btn primary lg block', type: 'submit', text: 'Sign in' });
+    var btn = h('button', { class: 'btn primary lg block', type: 'submit', text: up ? 'Create admin account' : 'Sign in' });
     var form = h('form', { class: 'login-box', onsubmit: async function (e) {
       e.preventDefault(); errEl.textContent = ''; btn.disabled = true;
-      try { await auth.signInWithEmailAndPassword(email.value.trim(), pass.value); }
-      catch (x) { errEl.textContent = /invalid|wrong|not-found/.test(x.code || '') ? 'Email or password is wrong.' : /too-many/.test(x.code || '') ? 'Too many attempts. Try again later.' : errMsg(x); }
+      try {
+        if (up) {
+          if (pass.value.length < 10) throw { code: 'short' };
+          var cred = await auth.createUserWithEmailAndPassword(email.value.trim(), pass.value);
+          try { await cred.user.sendEmailVerification(); } catch (e) { }
+        } else await auth.signInWithEmailAndPassword(email.value.trim(), pass.value);
+      }
+      catch (x) {
+        var c = x.code || '';
+        errEl.textContent = c === 'short' ? 'Use at least 10 characters for an admin password.'
+          : /email-already-in-use/.test(c) ? 'An account with this email already exists. Sign in instead.'
+          : /weak-password/.test(c) ? 'Choose a stronger password.'
+          : /invalid-email/.test(c) ? 'Enter a valid email address.'
+          : /invalid|wrong|not-found/.test(c) ? 'Email or password is wrong.'
+          : /too-many/.test(c) ? 'Too many attempts. Try again later.' : errMsg(x);
+      }
       btn.disabled = false;
     } },
-      brand(), h('div', null, h('h1', { text: 'Platform console', style: null }), h('p', { class: 'muted', text: 'Restricted to Vastrenix staff. All actions are logged.' })),
+      brand(), h('div', null, h('h1', { text: up ? 'Create admin account' : 'Platform console' }), h('p', { class: 'muted', text: up ? 'Use an email listed in ADMIN_EMAILS on the server. You will verify it next.' : 'Restricted to Vastrenix staff. All actions are logged.' })),
       h('div', { class: 'fld' }, h('label', { for: 'em', text: 'Email' }), email),
       h('div', { class: 'fld' }, h('label', { for: 'pw', text: 'Password' }), pass),
-      errEl, btn);
+      errEl, btn,
+      h('button', { class: 'btn ghost block', type: 'button', text: up ? 'I already have an account — sign in' : 'New admin? Create account', onclick: function () { renderLogin('', up ? 'in' : 'up'); } }),
+      up ? null : h('button', { class: 'btn ghost block', type: 'button', text: 'Forgot password?', onclick: async function () {
+        var e = email.value.trim(); if (!e) { errEl.textContent = 'Enter your email first.'; return; }
+        try { await auth.sendPasswordResetEmail(e); errEl.textContent = ''; toast('Password reset link sent to ' + e); } catch (x) { errEl.textContent = errMsg(x); }
+      } }));
     root.appendChild(form); email.focus();
+  }
+
+  /* Signed in, but not an admin yet: verify the email, then ask the server to grant access (only for ADMIN_EMAILS). */
+  function renderActivate(u) {
+    var root = clear(document.getElementById('root')); root.className = 'login';
+    var errEl = h('p', { class: 'err' });
+    var verified = !!u.emailVerified;
+    var act = h('button', { class: 'btn primary lg block', type: 'button', text: verified ? 'Activate admin access' : 'I have verified my email — activate', onclick: async function () {
+      errEl.textContent = ''; act.disabled = true;
+      try {
+        await u.reload();
+        if (!auth.currentUser.emailVerified) throw new Error('Your email isn’t verified yet. Open the link in the email we sent, then try again.');
+        await auth.currentUser.getIdToken(true);
+        await adminApi('/api/admin/bootstrap');
+        var t = await auth.currentUser.getIdTokenResult(true);
+        if (t.claims.platformAdmin !== true) throw new Error('Access was granted but hasn’t reached this session yet. Sign out and sign in again.');
+        ME = { uid: auth.currentUser.uid, email: auth.currentUser.email };
+        toast('Admin access activated'); watchAll(); render();
+      } catch (e) { errEl.textContent = e.message || String(e); }
+      act.disabled = false;
+    } });
+    var resend = h('button', { class: 'btn line block', type: 'button', text: 'Send verification email again', onclick: async function () {
+      try { await u.sendEmailVerification(); toast('Verification email sent to ' + u.email); } catch (e) { errEl.textContent = /too-many/.test(e.code || '') ? 'Too many emails sent. Wait a few minutes.' : errMsg(e); }
+    } });
+    root.appendChild(h('div', { class: 'login-box' }, brand(),
+      h('div', null, h('h1', { text: 'Activate admin access' }), h('p', { class: 'muted', text: 'Signed in as ' + (u.email || '') + '.' })),
+      verified ? h('p', { class: 'small', text: 'Your email is verified. If it is on the admin list, activate below.' })
+        : h('p', { class: 'small', text: 'Step 1: open the verification email we sent to ' + (u.email || 'your inbox') + ' (check spam) and click the link. Step 2: come back and press the button below.' }),
+      act, verified ? null : resend, errEl,
+      h('button', { class: 'btn ghost block', type: 'button', text: 'Sign out', onclick: function () { auth.signOut(); } })));
   }
 
   function stopWatching() { unsub.forEach(function (f) { try { f(); } catch (e) { } }); unsub = []; D = { subs: {}, codes: {}, reqs: {}, tickets: {}, pays: {}, billing: null, log: [], loaded: {} }; S.server = null; }
@@ -371,7 +423,7 @@
     var payee = h('input', { class: 'in', value: c.payeeName, maxlength: 80, id: 'payee' });
     var web = h('input', { class: 'in', value: c.webAppUrl, maxlength: 200, placeholder: 'https://vastrenix-web.vercel.app', id: 'web' });
     var supp = h('input', { class: 'in', value: c.supportEmail, maxlength: 120, placeholder: 'contact@vastrenix.com', id: 'supp' });
-    var android = h('select', { class: 'in', id: 'andr' }, h('option', { value: 'external', text: 'Open the website to pay (APK / direct download)', selected: c.android !== 'hidden' }), h('option', { value: 'hidden', text: 'Hide payments in the app (Google Play build)', selected: c.android === 'hidden' }));
+    var android = h('select', { class: 'in', id: 'andr' }, h('option', { value: 'inapp', text: 'Pay inside the app with Razorpay (APK 2.1+, not for Google Play)', selected: c.android === 'inapp' }), h('option', { value: 'external', text: 'Open the website to pay (APK / direct download)', selected: c.android !== 'hidden' && c.android !== 'inapp' }), h('option', { value: 'hidden', text: 'Hide payments in the app (Google Play build)', selected: c.android === 'hidden' }));
     var errEl = h('p', { class: 'err' });
     var saveBtn = h('button', { class: 'btn primary', text: 'Save settings', onclick: save });
 
@@ -412,9 +464,10 @@
       if (!bad && url && !/^https:\/\/[a-z0-9.-]+(:\d+)?(\/[\w./-]*)?$/i.test(url)) bad = 'Website address must start with https://';
       if (!bad && upiId.value.trim() && !/^[\w.-]{2,64}@[a-z]{2,32}$/i.test(upiId.value.trim())) bad = 'That UPI ID doesn’t look right (example: name@okhdfcbank).';
       if (!bad && !CYCLES.some(function (k) { return plans[k].active; })) bad = 'Keep at least one plan available.';
+      if (!bad && android.value === 'inapp' && (!mRzp.checked || !url)) bad = 'In-app payments need Razorpay switched on and the website address filled in (the app calls the payment server there).';
       if (!bad && mRzp.checked && sv && sv.razorpay === false) bad = 'Razorpay keys are not set on the server yet — add them in Vercel before switching Razorpay on.';
       if (bad) { errEl.textContent = bad; return; }
-      var doc = { plans: plans, methods: { razorpay: !!mRzp.checked, upi: !!mUpi.checked }, upiId: upiId.value.trim(), payeeName: payee.value.trim().slice(0, 80) || 'Vastrenix', android: android.value === 'hidden' ? 'hidden' : 'external', webAppUrl: url, supportEmail: supp.value.trim().slice(0, 120), updatedAt: Date.now(), updatedBy: ME.uid };
+      var doc = { plans: plans, methods: { razorpay: !!mRzp.checked, upi: !!mUpi.checked }, upiId: upiId.value.trim(), payeeName: payee.value.trim().slice(0, 80) || 'Vastrenix', android: ['hidden', 'inapp'].indexOf(android.value) >= 0 ? android.value : 'external', webAppUrl: url, supportEmail: supp.value.trim().slice(0, 120), updatedAt: Date.now(), updatedBy: ME.uid };
       saveBtn.disabled = true;
       try {
         var b = db.batch();

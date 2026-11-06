@@ -36,14 +36,18 @@ function collRef(p) {
   });
   return Object.assign(q([], 0), { doc: (id) => docRef(p + '/' + (id || 'auto' + (++autoId))), add: async (d) => { const r = docRef(p + '/auto' + (++autoId)); await r.set(d); return r; } });
 }
+const DELETED_USERS = [];
 const fakeDb = {
   doc: docRef, collection: collRef,
+  recursiveDelete: async (ref) => { for (const k of [...store.keys()]) if (k === ref.path || k.startsWith(ref.path + '/')) store.delete(k); },
   runTransaction: async (fn) => {
     const writes = [];
     const tx = { get: (r) => r.get(), set: (r, d, o) => writes.push(() => r.set(d, o)), update: (r, d) => writes.push(() => r.update(d)) };
     const out = await fn(tx); for (const w of writes) await w(); return out;
   }
 };
+const USERS = { owner1: { email: 'owner@shop.in', emailVerified: true }, other1: { email: 'Boss@VX.in', emailVerified: false }, adm1: { email: 'admin@vx.in', emailVerified: true } };
+const CLAIMS = {};
 const TOKENS = {
   'owner-token-0000000000000': { uid: 'owner1', email: 'owner@shop.in' },
   'other-token-0000000000000': { uid: 'other1', email: 'other@shop.in' },
@@ -52,7 +56,7 @@ const TOKENS = {
 const fakeAdmin = {
   apps: [1],
   initializeApp: () => {}, credential: { cert: () => ({}) },
-  app: () => ({ firestore: () => fakeDb, auth: () => ({ verifyIdToken: async (t) => { if (!TOKENS[t]) throw new Error('bad token'); return TOKENS[t]; } }) }),
+  app: () => ({ firestore: () => fakeDb, auth: () => ({ verifyIdToken: async (t) => { if (!TOKENS[t]) throw new Error('bad token'); return TOKENS[t]; }, getUser: async (uid) => Object.assign({ uid, customClaims: CLAIMS[uid] || {} }, USERS[uid] || {}), setCustomUserClaims: async (uid, c) => { CLAIMS[uid] = c; }, deleteUser: async (uid) => { DELETED_USERS.push(uid); } }) }),
   firestore: { FieldValue: { serverTimestamp: () => 'TS', arrayUnion: (...v) => ({ __arrayUnion: v }) } }
 };
 const origLoad = Module._load;
@@ -299,4 +303,60 @@ test('oversized bodies are rejected with 413', async () => {
   const big = JSON.stringify({ cycle: 'monthly', pad: 'x'.repeat(70 * 1024) });
   assert.equal((await call(api('razorpay/create-order'), { token: OWNER, raw: big })).status, 413);
   assert.equal((await call(api('razorpay/webhook'), { raw: big, headers: { 'content-length': String(big.length) } })).status, 413);
+});
+
+test('admin bootstrap: only listed + verified emails become admin', async () => {
+  delete process.env.ADMIN_EMAILS;
+  assert.equal((await call(api('admin/bootstrap'), { token: 'owner-token-0000000000000' })).status, 403, 'off when ADMIN_EMAILS is empty');
+  process.env.ADMIN_EMAILS = 'boss@vx.in, someone@else.in';
+  let r = await call(api('admin/bootstrap'), { token: 'owner-token-0000000000000' });
+  assert.equal(r.status, 403); assert.equal(r.json.code, 'not_listed');
+  r = await call(api('admin/bootstrap'), { token: 'other-token-0000000000000' });
+  assert.equal(r.status, 403); assert.equal(r.json.code, 'unverified');
+  assert.equal(CLAIMS.other1, undefined);
+  USERS.other1.emailVerified = true;
+  r = await call(api('admin/bootstrap'), { token: 'other-token-0000000000000' });
+  assert.equal(r.status, 200, JSON.stringify(r.json));
+  assert.equal(CLAIMS.other1.platformAdmin, true);
+  assert.equal((await call(api('admin/bootstrap'), { token: 'other-token-0000000000000' })).json.already, true);
+  assert.equal((await call(api('admin/bootstrap'), {})).status, 401);
+  delete process.env.ADMIN_EMAILS;
+});
+
+test('account deletion: needs DELETE + fresh sign-in, wipes the store, keeps anonymised payments', async () => {
+  const o = await newOrder('monthly');
+  store.set('codes/VX-SF-AB12', { storeId: 'owner1', name: 'Shree Fashion' });
+  store.set('stores/owner1/products/p1', { name: 'Saree' });
+  store.set('stores/owner1/ledger/2026-11-06', { invoices: [] });
+  store.set('subscriptions/owner1', { status: 'active' });
+  store.set('users/owner1', { storeId: 'owner1' });
+  store.set('supportRequests/t1', { uid: 'owner1', message: 'hi' });
+  store.set('supportRequests/t2', { uid: 'someone-else', message: 'keep' });
+  const tok = TOKENS['owner-token-0000000000000'];
+  tok.auth_time = Math.floor(Date.now() / 1000) - 3600;
+  let r = await call(api('account/delete'), { token: 'owner-token-0000000000000', body: { confirm: 'DELETE' } });
+  assert.equal(r.status, 401, 'old sign-in must be refused'); assert.equal(r.json.code, 'reauth_required');
+  tok.auth_time = Math.floor(Date.now() / 1000) - 60;
+  r = await call(api('account/delete'), { token: 'owner-token-0000000000000', body: { confirm: 'yes' } });
+  assert.equal(r.status, 400);
+  r = await call(api('account/delete'), { token: 'owner-token-0000000000000', body: { confirm: 'DELETE' } });
+  assert.equal(r.status, 200, JSON.stringify(r.json));
+  assert.ok(![...store.keys()].some((k) => k.startsWith('stores/owner1')), 'store data removed');
+  assert.ok(!store.has('codes/VX-SF-AB12') && !store.has('subscriptions/owner1') && !store.has('users/owner1') && !store.has('supportRequests/t1'));
+  assert.ok(store.has('supportRequests/t2'), 'other users untouched');
+  const pay = store.get('payments/' + o.orderId);
+  assert.ok(pay, 'payment record kept'); assert.equal(pay.email, ''); assert.equal(pay.storeName, '(deleted account)');
+  assert.deepEqual(DELETED_USERS, ['owner1']);
+  delete tok.auth_time;
+});
+
+test('account deletion: staff member leaves the store; admins are refused', async () => {
+  store.set('users/other1', { storeId: 'owner1' });
+  store.set('stores/owner1/staff/other1', { role: 'cashier', status: 'active' });
+  TOKENS['other-token-0000000000000'].auth_time = Math.floor(Date.now() / 1000);
+  const r = await call(api('account/delete'), { token: 'other-token-0000000000000', body: { confirm: 'DELETE' } });
+  assert.equal(r.status, 200);
+  assert.ok(!store.has('stores/owner1/staff/other1')); assert.ok(store.has('stores/owner1/meta/store'), 'owner store kept');
+  TOKENS['admin-token-0000000000000'].auth_time = Math.floor(Date.now() / 1000);
+  assert.equal((await call(api('account/delete'), { token: 'admin-token-0000000000000', body: { confirm: 'DELETE' } })).status, 403);
 });
